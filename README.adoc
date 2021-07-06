@@ -109,7 +109,7 @@ A successful deployment should show the following pods:
 [source,bash]
 ----
 NAME                                    READY   STATUS    RESTARTS   AGE
-istio-multi-rev-demo-848bd4d8f7-kshxs   2/2     Running   0          89s
+hello-world-848bd4d8f7-kshxs   2/2     Running   0          89s
 ----
 
 == Accessing the application
