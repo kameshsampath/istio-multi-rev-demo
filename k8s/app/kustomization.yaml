@@ -1,0 +1,8 @@
+namespace: demo-1-8-6
+
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  - curler.yaml
+  - rbac.yaml
+  - service.yaml

@@ -1,0 +1,24 @@
+---
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - imagePullPolicy: Always
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /q/health/live
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 10
+            successThreshold: 1
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /q/health/ready
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 5
+            successThreshold: 1
+      serviceAccountName: istio-multi-rev-demo

@@ -1,0 +1,226 @@
+= Istio Multi Revision Demo
+
+== Pre-requisites
+
+* https://asdf-vm.com[asdf-vm]
+* Kubernetes Cluster
+* https://kubernetes.io/docs/tasks/tools/[kubectl]
+* https://httpie.io[httpie]
+* https://docs.solo.io/gloo-edge/latest/getting_started/[glooctl]
+** https://kind.sigs.k8s.io[KinD]
+** https://civo.com[Civo]
+* https://docs.solo.io/gloo-edge/latest/getting_started/[Gloo Edge]
+
+== Download Sources
+
+[source,bash]
+----
+git clone https://github.com/kameshsampath/istio-multi-rev-demo istio-multi-rev-demo && cd $_
+----
+
+We will refer to the cloned folder as `$PROJECT_HOME`:
+
+[source,bash]
+----
+export PROJECT_HOME="$(pwd)"
+----
+
+== Install asdf-istio plugin
+
+[source,bash]
+----
+asdf plugin-add istio https://github.com/kameshsampath/asdf-istio
+----
+
+== Setup Kubernetes Cluster
+
+For the examples we will be using the KinD as our Kubernetes cluster, run the following command to start single node Kubernetes cluster:
+
+[source,bash]
+----
+$PROJECT_HOME/start-kind.sh
+----
+
+== Deploy Istio Control Plane
+
+Download and install Istio v1.8.6:
+
+[source,bash]
+----
+cd $PROJECT_HOME
+asdf install
+----
+
+Once Istio is downloaded, let us setup an Istio control plane with a pinned revision `1-8-6`,
+
+[source,bash]
+----
+$PROJECT_HOME/istio/installControlPlane.sh
+----
+
+Let us now verify the installation by selecting the pods in `istio-system` namespace and list the label `istio.io/rev':
+
+[source]
+----
+kubectl get pods -n istio-system -L'istio.io/rev'
+----
+
+[source,bash]
+----
+NAME                             READY   STATUS    RESTARTS   AGE     REV
+istiod-1-8-6-869d57f467-dkxpq    1/1     Running   0          21h     1-8-6#<1>
+----
+<1> Istio Control Plane configured with `v1.8.6`
+
+[NOTE]
+====
+The Istio revision name could be any string but for easier clarity we use the semantic version numbers with `.` replaced with `-`
+====
+
+== Build Application
+
+We need to build and push the application to the registry before we use them in our Kubernetes manifests:
+
+[source,bash]
+----
+$PROJECT_HOME/buildAndPush.sh
+----
+
+The command will build and push to the internal registry identified via `localhost:5000`.
+
+== Deploy application
+
+The application is a simple greeter application with a REST API at `/api/hello` that sends a JSON response with a greeting, Istio revision used and service revision.
+
+[source,bash]
+----
+kubectl apply -k $PROJECT_HOME/k8s/app
+----
+
+Wait for pods to be in running state:
+
+[source,bash]
+----
+watch kubectl get pods -w demos-1-18-6
+----
+
+A successful deployment should show the following pods:
+
+[source,bash]
+----
+NAME                                    READY   STATUS    RESTARTS   AGE
+istio-multi-rev-demo-848bd4d8f7-kshxs   2/2     Running   0          89s
+----
+
+== Accessing the application
+
+We will use https://docs.solo.io/gloo-edge/latest/introduction/[Gloo Edge] as API gateway to access the application:
+
+=== Install Gloo Edge
+
+[source,bash]
+----
+glooctl install gateway --values $PROJECT_HOME/gloo/gloo-install-overrides.yaml
+----
+
+NOTE: The install might take few minutes to complete depending upon your internet speed
+
+Run the following check command to verify if its installed and ready:
+
+[source,bash]
+----
+glooctl check
+----
+
+A successful setup should show:
+
+[source]
+----
+Checking deployments... OK
+Checking pods... OK
+Checking upstreams... OK
+Checking upstream groups... OK
+Checking auth configs... OK
+Checking rate limit configs... OK
+Checking VirtualHostOptions... OK
+Checking RouteOptions... OK
+Checking secrets... OK
+Checking virtual services... OK
+Checking gateways... OK
+Checking proxies... OK
+No problems detected.
+I0702 21:09:18.553303   68173 request.go:645] Throttling request took 1.048233536s, request: GET:https://192.168.99.101:8443/apis/rbac.authorization.k8s.io/v1?timeout=32s
+Skipping Gloo Instance check -- Gloo Federation not detected
+----
+
+NOTE: To know more details on Gloo Edge installation https://docs.solo.io/gloo-edge/latest/installation/gateway/kubernetes/[here]
+
+=== Route
+
+Gloo should be able to gather the available upstreams, lets check if our demo service upstream is available:
+
+[source,bash]
+----
+export DEMO_UPSTREAM=$(kubectl get upstreams.gloo.solo.io -ojsonpath='{.items[?(@.spec.kube.serviceName=="hello-world")].metadata.name}' -n gloo-system)
+glooctl get upstreams $DEMO_UPSTREAM
+----
+
+The command should shown an output like:
+
+Let's check its status:
+
+[source,text]
+----
++-----------------------------+------------+----------+----------------------------+
+|          UPSTREAM           |    TYPE    |  STATUS  |          DETAILS           |
++-----------------------------+------------+----------+----------------------------+
+| demo-1-8-6-hello-world-8080 | Kubernetes | Accepted | svc name:      hello-world |
+|                             |            |          | svc namespace: demo-1-8-6  |
+|                             |            |          | port:          8080        |
+|                             |            |          |                            |
++-----------------------------+------------+----------+----------------------------+
+
+----
+
+Let us now update the route all the traffic to `1.8.6`:
+
+[source,bash]
+----
+kubectl apply -f $PROJECT_HOME/gloo/gateway.yaml
+# virtualservice.gateway.solo.io/istio-multi-rev-demo created
+----
+
+Run the script `$PROJECT_HOME/run.sh` to send few requests to our API and you should see the following responses with traffic getting to the demo service with revision `1-8-6`:
+
+[source,text]
+----
+{
+    "istioRevision": "1-8-6",
+    "message": "HelloWorld  hello-world-dbb687654-jvnxw from greeting service 'v1.0': 2",
+    "serviceVersion": "v1.0"
+}
+
+
+{
+    "istioRevision": "1-8-6",
+    "message": "HelloWorld  hello-world-dbb687654-jvnxw from greeting service 'v1.0': 3",
+    "serviceVersion": "v1.0"
+}
+
+
+{
+    "istioRevision": "1-8-6",
+    "message": "HelloWorld  hello-world-dbb687654-jvnxw from greeting service 'v1.0': 4",
+    "serviceVersion": "v1.0"
+}
+
+----
+
+Let us also make sure the right version of `istio-proxy` is injected:
+
+[source,bash]
+----
+kubectl get  pod -lapp=hello-world -n demo-1-8-6 -ojsonpath='{.items[*].spec.containers[?(@.name == "istio-proxy")].image}'
+----
+
+The command should return an output like `docker.io/istio/proxyv2:1.8.6`
