@@ -1,0 +1,7 @@
+settings:
+  writeNamespace: my-gloo
+  watchNamespaces:
+    - demo-1-8-6
+    - demo-1-10-2
+    - my-gloo
+    - gloo-system

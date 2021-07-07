@@ -38,7 +38,7 @@ basedir() {
 ISTIO_VERSION=$(asdf current istio | awk '{print $2}' )
 ISTIO_REVISION=$(awk 'BEGIN { dot = "[\\.]";dash ="-" } { gsub(dot, dash); print }' <<< "$ISTIO_VERSION")
 
-echo "Appling Istio Revision: $ISTIO_REVISION"
+echo "Applying Istio Revision: $ISTIO_REVISION"
 
 NS=$(kubectl get namespace $ISTIO_NS --ignore-not-found);
 if [[ "$NS" ]]; then

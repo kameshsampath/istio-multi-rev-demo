@@ -4,7 +4,7 @@ metadata:
   name: hello-world
   labels:
     app: hello-world
-    version: v1.0
+    version: v2.0
 spec:
   replicas: 1
   template:
@@ -12,11 +12,11 @@ spec:
       name: hello-world
       labels:
         app: hello-world
-        version: v1.0
+        version: v2.0
     spec:
       containers:
         - name: hello-world
-          image: localhost:5000/example/istio-multi-rev-demo
+          image: ghcr.io/kameshsampath/istio-multi-rev-demo
           imagePullPolicy: Always
           env:
             - name: IN_CLUSTER
@@ -28,11 +28,11 @@ spec:
           livenessProbe:
             httpGet:
               port: 8080
-              path: /live
+              path: /health/live
           readinessProbe:
             httpGet:
               port: 8080
-              path: /ready
+              path: /health/ready
           resources:
             limits:
               cpu: "100m"
@@ -45,4 +45,4 @@ spec:
   selector:
     matchLabels:
       app: hello-world
-      version: v1.0
+      version: v2.0

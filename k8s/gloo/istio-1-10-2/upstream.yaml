@@ -1,0 +1,13 @@
+apiVersion: gloo.solo.io/v1
+kind: Upstream
+metadata:
+  name: demo-1-10-2-hello-world-8080
+spec:
+  kube:
+    selector:
+      app: hello-world
+      version: v2.0
+    serviceName: hello-world
+    serviceNamespace: demo-1-10-2
+    servicePort: 8080
+

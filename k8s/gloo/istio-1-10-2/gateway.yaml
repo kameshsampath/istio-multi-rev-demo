@@ -2,7 +2,6 @@ apiVersion: gateway.solo.io/v1
 kind: VirtualService
 metadata:
   name: istio-multi-rev-demo
-  namespace: gloo-system
 spec:
   virtualHost:
     domains:
@@ -12,12 +11,17 @@ spec:
           - prefix: /
         routeAction:
           # ----------------------- Destination ----------------------
-          # All traffic to revision 1-8-6
+          # Distribute traffic between 1-8-6 and 1-10-2
           # ----------------------------------------------------------------
           multi:
             destinations:
-              - weight: 100
+              - weight: 70
                 destination:
                   upstream:
                     name: demo-1-8-6-hello-world-8080
-                    namespace: gloo-system
+                    namespace: my-gloo
+              - weight: 30
+                destination:
+                  upstream:
+                    name: demo-1-10-2-hello-world-8080
+                    namespace: my-gloo

@@ -15,14 +15,18 @@ def setup_app(svc):
         config.load_kube_config()
 
 
-@app.route("/live")
+@app.route("/health/live")
 def live():
-    return "live"
+    return {
+        "status": "live"
+    }
 
 
-@app.route("/ready")
+@app.route("/health/ready")
 def ready():
-    return "ready"
+    return {
+        "status": "ready"
+    }
 
 
 @app.route("/api/hello")

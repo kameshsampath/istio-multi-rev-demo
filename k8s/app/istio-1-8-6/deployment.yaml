@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-world
+  labels:
+    app: hello-world
+    version: v1.0
+spec:
+  replicas: 1
+  template:
+    metadata:
+      name: hello-world
+      labels:
+        app: hello-world
+        version: v1.0
+    spec:
+      containers:
+        - name: hello-world
+          image: ghcr.io/kameshsampath/istio-multi-rev-demo
+          imagePullPolicy: Always
+          env:
+            - name: IN_CLUSTER
+              value: yes
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          livenessProbe:
+            httpGet:
+              port: 8080
+              path: /health/live
+          readinessProbe:
+            httpGet:
+              port: 8080
+              path: /health/ready
+          resources:
+            limits:
+              cpu: "100m"
+              memory: "200Mi"
+            requests:
+              cpu: "50m"
+              memory: "100Mi"
+      restartPolicy: Always
+      serviceAccountName: hello-world-demo-sa
+  selector:
+    matchLabels:
+      app: hello-world
+      version: v1.0
