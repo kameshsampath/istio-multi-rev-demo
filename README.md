@@ -1,21 +1,21 @@
-# Istio Multi Revision Demo
+# Istio Multi Revision Demo (Gloo Enterprise)
 
 A simple hello world application that shows how to install and use multiple revisions of [Istio](https://istio.io).
 As part of the demo, we will deploy the app that will use Istio Proxy from version 1.8.6 and 1.10.2. The application also uses [Gloo Edge](https://docs.solo.io/gloo-edge/latest) as the application gateway to route the traffic between multiple revisions of istio.
 
 ## Pre-requisites
 
-* [asdf-vm](https://asdf-vm.com)
+* Docker for Mac or Windows  / Linux
+* [pipx](https://pypa.github.io/pipx)
 * [kubectl](https://kubernetes.io/docs/tasks/tools)
 * [httpie](https://httpie.io)
-* [glooctl](https://docs.solo.io/gloo-edge/latest/getting_started)
 * Kubernetes Cluster e.g [KinD](https://kind.sigs.k8s.io)
 * [Gloo Edge](https://docs.solo.io/gloo-edge/latest/getting_started/)
 
 ## Download Sources
 
 ```shell
-git clone https://github.com/kameshsampath/istio-multi-rev-demo istio-multi-rev-demo && cd $_
+git clone https://github.com/kameshsampath/istio-multi-rev-demo -b all-in-one istio-multi-rev-demo && cd $_
 ```
 
 We will refer to the cloned folder as `$PROJECT_HOME`:
@@ -24,53 +24,30 @@ We will refer to the cloned folder as `$PROJECT_HOME`:
 export PROJECT_HOME="$(pwd)"
 ```
 
-## Setup Kubernetes Cluster
+## Setup Project
 
-For the examples we will be using the KinD as our Kubernetes cluster, run the following command to start single node Kubernetes cluster:
+Install `pipx` as described here https://pypa.github.io/pipx/installation/
 
 ```shell
-$PROJECT_HOME/start-kind.sh
-```
-
-## Install asdf-istio plugin
-
-```
-asdf plugin-add istio https://github.com/kameshsampath/asdf-istio
-```
-
-## Download and install Istio
-
-Download and install Istio v1.8.6:
-
-```
 cd $PROJECT_HOME
-asdf local istio 1.8.6#<1>
-asdf install
+pipx install poetry
+# cretae virtual env locally via .venv file
+poetry config virtualenvs.in-project true
+poetry install
+poetry shell
 ```
 
-## Deploy Istio Control Plane - Istio v1.8.6
-
-Once Istio is downloaded, let us set up an Istio control plane with a pinned revision `1-8-6`,
-
-```
-$PROJECT_HOME/istio/installControlPlane.sh
-```
-
-Let us now verify the installation by selecting the pods in `istio-system` namespace and list the label `istio.io/rev':
+## Install Ansible Collection
 
 ```shell
-kubectl get pods -n istio-system -L'istio.io/rev'
+ansible-galaxy collection install -r requirements.yml
 ```
+
+## Setup Kubernetes Cluster and Install Istio and Gloo Edge
 
 ```shell
-NAME                             READY   STATUS    RESTARTS   AGE     REV
-istiod-1-8-6-869d57f467-dkxpq    1/1     Running   0          21h     1-8-6#<1>
+ansible-playbook cluster-setup-ee.yaml
 ```
-
-<1> Istio Control Plane configured with `v1.8.6`
-
-__NOTE__:
-The Istio revision name could be any string but for easier clarity we use the semantic version numbers with `.` replaced with `-`
 
 ## Deploy application
 
@@ -100,14 +77,18 @@ As part of this demo, we will install Gloo Edge in to our custom namespace calle
 * [`install-overrides-no-discovery.yaml`](https://github.com/kameshsampath/istio-multi-rev-demo/blob/main/gloo/install-overrides-no-discovery.yaml) - Use KinD cluster with gloo-proxy available via NodePort with discovery disabled
 
 __IMPORTANT__:
-By default, `glooctl install gateway` installs all the components in `gloo-system` namespace.
+By default, `glooctl install gateway enterprise` installs all the components in `gloo-system` namespace.
 As we will be using custom namespace `my-gloo`, its very important that you provide the `-n` or `--namespace` option with value as `my-gloo`.
 
 
-```
-#e.g. glooctl install gateway -n my-gloo \
-#   --values $PROJECT_HOME/gloo/install-overrides-nodeport.yaml
-glooctl install gateway --values $PROJECT_HOME/gloo/<your-config-from-list-above>
+```shell
+# e.g
+# glooctl install gateway enterprise -n my-gloo \
+#  --values $PROJECT_HOME/# gloo/install-overrides-nodeport-no-discovery.yaml \
+#  --license-key # $GLOO_LICENSE_KEY
+glooctl install gateway enterprise -n my-gloo \
+  --values $PROJECT_HOME/gloo/<your-config-from-list-above>
+  --license-key # $GLOO_LICENSE_KEY
 ```
 
 __NOTE__:The Gloo Edge installation might take few minutes to complete depending upon your internet speed. Wait for the gloo to be ready before proceeding.
@@ -131,26 +112,24 @@ Checking secrets... OK
 Checking virtual services... OK
 Checking gateways... OK
 Checking proxies... OK
-No problems detected.
-I0702 21:09:18.553303   68173 request.go:645] Throttling request took 1.048233536s, request: GET:https://192.168.99.101:8443/apis/rbac.authorization.k8s.io/v1?timeout=32s
-Skipping Gloo Instance check -- Gloo Federation not detected
+Checking rate limit server... OK
 ```
 
 __NOTE__: To know more details on Gloo Edge installation [here](https://docs.solo.io/gloo-edge/latest/installation/gateway/kubernetes/)
 
 ### Upstreams
 
-####  With Discovery
+#### With Discovery
 
 If you have enabled discovery then, Gloo Edge should discover the upstreams automatically as shown below:
 
-```
+```shell
 glooctl get upstreams -n my-gloo
 ```
 
 Let's check its status,
 
-```
+```shell
 +-----------------------------+------------+----------+----------------------------+
 |          UPSTREAM           |    TYPE    |  STATUS  |          DETAILS           |
 +-----------------------------+------------+----------+----------------------------+
@@ -165,7 +144,7 @@ Let's check its status,
 
 With Gloo discovery disabled, you need to create the upstream manually to be used with gateway.
 
-```
+```shell
 kubectl apply -n my-gloo -f $PROJECT_HOME/k8s/gloo/istio-1-8-6/upstream.yaml
 ```
 
@@ -175,17 +154,17 @@ Now running the command `glooctl get upstreams -n my-gloo` will show one upstrea
 
 Let us now update the route all the traffic to `1.8.6`,
 
-```
+```shell
 kubectl apply -n my-gloo -f  $PROJECT_HOME/k8s/gloo/istio-1-8-6/gateway.yaml
 ```
 
 Check the status of the route:
 
-```
+```shell
 glooctl get virtualservice -n my-gloo
 ```
 
-```
+```shell
 +----------------------+--------------+---------+------+----------+-----------------+---------------------+
 |   VIRTUAL SERVICE    | DISPLAY NAME | DOMAINS | SSL  |  STATUS  | LISTENERPLUGINS |       ROUTES        |
 +----------------------+--------------+---------+------+----------+-----------------+---------------------+
@@ -195,7 +174,7 @@ glooctl get virtualservice -n my-gloo
 
 Run the script `$PROJECT_HOME/run.sh` to send few requests to our API and you should see the following responses with traffic getting to the demo service with revision `1-8-6`:
 
-```
+```shell
 {
     "istioRevision": "1-8-6",
     "message": "HelloWorld  hello-world-dbb687654-jvnxw from greeting service 'v1.0': 2",
@@ -220,7 +199,7 @@ Run the script `$PROJECT_HOME/run.sh` to send few requests to our API and you sh
 
 Let us also make sure the right version of `istio-proxy` is injected,
 
-```
+```shell
 kubectl get  pod -lapp=hello-world -n demo-1-8-6 -ojsonpath='{.items[*].spec.containers[?(@.name == "istio-proxy")].image}'
 ```
 
@@ -231,7 +210,7 @@ The command should return an output like `docker.io/istio/proxyv2:1.8.6`
 Let's have some fun with Gloo Edge by routing to multiple destinations.
 Though it is not needed but to make things spicy let us now install another version of Istio v1.10.2. A matter of fact you can  have any number of Istio revisions installed and use different versions for different services.
 
-```
+```shell
 cd $PROJECT_HOME
 asdf local istio 1.10.2#<1>
 asdf install
@@ -242,13 +221,13 @@ asdf install
 
 Once Istio is downloaded, let us set up an Istio control plane with a pinned revision `1.10.2`,
 
-```
+```shell
 $PROJECT_HOME/istio/installControlPlane.sh
 ```
 
 The installation should show an output like:
 
-```
+```shell
 Applying Istio Revision: 1-10-2
 Skipping creation of namespace istio-system - already exists
 Skipping creation of service istiod - already exists
@@ -265,41 +244,42 @@ Let us now verify the installation by selecting the pods in `istio-system` names
 kubectl get pods -n istio-system -L'istio.io/rev'
 ```
 
-```
+```shell
 NAME                             READY   STATUS    RESTARTS   AGE   REV
 istiod-1-10-2-79d64cf497-ltqx9   1/1     Running   0          43s   1-10-2 #<1>
 istiod-1-8-6-869d57f467-vnz29    1/1     Running   0          77m   1-8-6 #<2>
 ```
+
 <1> Istio Control Plane configured with revision `1-10-2` corresponding to `v1.10.2`
 <2> The revision `1-8-6` is that of `v1.8.6` version that was installed earlier
 
-## Deploy application
+## Deploy application Istio v1.10.2
 
 The application is a simple greeter application with a REST API at `/api/hello` that sends a JSON response with a greeting, Istio revision used and service revision.
 
-```
+```shell
 kubectl apply -k $PROJECT_HOME/k8s/app/istio-1-10-2
 ```
 
 Wait for pods to be in running state,
 
-```
+```shell
 kubectl rollout status -n demo-1-10-2 deploy/hello-world --timeout=60s
 ```
 
-### Upstreams
+### Upstreams v1.10.2
 
-#### With Discovery
+#### With Discovery v1.10.2
 
 If you have enabled discovery then, Gloo Edge should discover the upstreams automatically as shown below:
 
-```
+```shell
 glooctl get upstreams -n my-gloo
 ```
 
 Let's check its status,
 
-```
+```shell
 +------------------------------+------------+----------+----------------------------+
 |           UPSTREAM           |    TYPE    |  STATUS  |          DETAILS           |
 +------------------------------+------------+----------+----------------------------+
@@ -314,31 +294,31 @@ Let's check its status,
 +------------------------------+------------+----------+----------------------------+
 ```
 
-#### No Discovery
+#### No Discovery v1.10.2
 
 With Gloo discovery disabled, you need to create the upstream of the `1-10-2` version of th service.
 
-```
+```shell
 kubectl apply -n my-gloo -f $PROJECT_HOME/k8s/gloo/istio-1-10-2/upstream.yaml
 ```
 
 Now running the command `glooctl get upstreams -n my-gloo` will show one upstream as shown above.
 
-### Route
+### Route v1.8.6 + v1.10.2
 
 Let us now update the route all the traffic between `1-8-6` and `1-10-2`,
 
-```
+```shell 
 kubectl apply -n my-gloo -f  $PROJECT_HOME/k8s/gloo/istio-1-10-2/gateway.yaml
 ```
 
 Check the status of the route,
 
-```
+```shell
 glooctl get virtualservice -n my-gloo
 ```
 
-```
+```shell
 +----------------------+--------------+---------+------+----------+-----------------+---------------------+
 |   VIRTUAL SERVICE    | DISPLAY NAME | DOMAINS | SSL  |  STATUS  | LISTENERPLUGINS |       ROUTES        |
 +----------------------+--------------+---------+------+----------+-----------------+---------------------+
@@ -410,7 +390,7 @@ Run the script `$PROJECT_HOME/run.sh` to send few requests to our API and you sh
 
 Let us also make sure the right version of `istio-proxy` is injected,
 
-```
+```shell
 kubectl get  pod -lapp=hello-world -n demo-1-10-2 -ojsonpath='{.items[*].spec.containers[?(@.name == "istio-proxy")].image}'
 ```
 
@@ -420,7 +400,7 @@ The command should return an output like `docker.io/istio/proxyv2:1.10.2`.
 
 If you plan to build and push the application to your container registry run the command:
 
-```
+```shell
 $PROJECT_HOME/buildAndPush.sh <your-registry-fqn>
 ```
 
