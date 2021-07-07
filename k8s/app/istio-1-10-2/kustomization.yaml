@@ -2,7 +2,6 @@ namespace: demo-1-10-2
 
 resources:
   - namespace.yaml
+  - ../common
   - deployment.yaml
-  - httpie.yaml
-  - rbac.yaml
   - service.yaml
